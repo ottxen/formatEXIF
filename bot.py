@@ -23,11 +23,11 @@ def get_image_metadata(file_path: str) -> str:
             file_size_kb = round(os.path.getsize(file_path) / 1024, 2)
 
             info_text = (
-                f"📷 **Image Technical Info:**\n\n"
-                f"• **Format:** {format_name}\n"
-                f"• **Resolution:** {width}x{height} px\n"
-                f"• **Color Mode:** {mode}\n"
-                f"• **File Size:** {file_size_kb} KB\n"
+                f"⎋ **Image Technical Info:**\n\n"
+                f"⌸ **Format:** {format_name}\n"
+                f"⎗ **Resolution:** {width}x{height} px\n"
+                f"⏣ **Color Mode:** {mode}\n"
+                f"⎙ **File Size:** {file_size_kb} KB\n"
             )
 
             exif_data = img.getexif()
@@ -47,7 +47,7 @@ def get_image_metadata(file_path: str) -> str:
 
             return info_text
     except Exception as e:
-        return f"❌ Error reading image metadata: {e}"
+        return f"☒ Error reading image metadata: {e}"
 
 
 @dp.message(CommandStart())
