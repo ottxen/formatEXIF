@@ -1,125 +1,150 @@
 import asyncio
-import logging
 import os
-import sys
-from aiogram import Bot, Dispatcher, F
+from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-TOKEN = os.getenv("BOT_TOKEN")
+# Отримуємо токен з змінних середовища Railway
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-bot = Bot(token=TOKEN)
+if not BOT_TOKEN:
+    raise ValueError("Помилка: BOT_TOKEN не знайдено у змінних середовища!")
+
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Зберігаємо обраний стиль для кожного користувача
-user_selected_style = {}
+# Зберігання обраної мови користувачів (у пам'яті)
+user_languages = {}
 
-# Сучасні, соковиті та величезні шаблони промтів
-PROMPT_TEMPLATES = {
-    "artistic": lambda t: f"A breathtaking modern digital illustration of {t}, rich painterly textures combined with crisp modern lines, expressive artistic brushwork, sophisticated color grading, dramatic atmospheric lighting, concept art masterpiece, trending on ArtStation, ultra-detailed, 8k resolution, cinematic composition --ar 16:9 --v 6.0",
-    
-    "webtoon": lambda t: f"A stunning modern webtoon and manhwa style illustration of {t}, clean polished linework, vibrant rich colors, gorgeous cel-shading with soft gradients, dramatic soft rim lighting, highly detailed character design, web comic cover art quality, visual storytelling masterpiece --ar 16:9 --v 6.0",
-    
-    "concept": lambda t: f"A high-end cinematic concept art of {t}, complex environment design, moody atmospheric haze, volumetric lighting rays, intricate surface textures, masterpiece created by industry veteran concept artists, Unreal Engine 5 render aesthetic, hyper-detailed depth --ar 16:9 --v 6.0",
-    
-    "dark_fantasy": lambda t: f"A dark epic fantasy digital painting of {t}, moody gothic atmosphere, deep shadows with subtle glowing highlights, intricate ornate details, rich oil-on-canvas texture mixed with modern digital lighting, dramatic chiaroscuro, museum-grade fantasy art --ar 4:3 --v 6.0",
-    
-    "stylized_3d": lambda t: f"A modern stylized 3D render of {t}, gorgeous clay and matte surface textures, soft studio subsurface scattering, premium artistic toy design aesthetic, octane render, beautiful pastel and neon color harmony, smooth organic contours, highly polished --ar 1:1 --v 6.0",
-    
-    "cyber_punk": lambda t: f"A next-gen cyberpunk aesthetic of {t}, hyper-detailed futuristic elements, complex holographic displays, moody rainy street reflections, neon glow, cinematic depth of field, ray-traced lighting, gritty yet clean sci-fi masterpiece --ar 16:9 --v 6.0",
-    
-    "anime_modern": lambda t: f"A high-end modern anime key visual featuring {t}, breathtaking background art inspired by Makoto Shinkai, luminous lighting, vibrant saturated colors, emotional atmosphere, exquisite detail in every element, crisp outlines, visual novel masterpiece --ar 16:9 --v 6.0",
-    
-    "minimal_vector": lambda t: f"A sleek modern vector art design of {t}, clean geometric shapes, sophisticated minimalist composition, flat design with smooth multi-layer gradients, elegant color palette, professional graphic branding style, crisp vector curves --ar 1:1 --v 6.0",
-    
-    "cinematic": lambda t: f"An ultra-detailed cinematic frame of {t}, shot on 35mm lens, anamorphic lens flare, professional Hollywood color grading, rich textures, incredible depth of field, dramatic moody atmosphere, award-winning cinematography --ar 16:9 --v 6.0",
-    
-    "neon_portrait": lambda t: f"A stunning stylized artistic portrait of {t}, vibrant dual-tone neon rim lighting, deep contrasting background, highly detailed facial features and textures, modern pop-culture aesthetic, professional studio lighting setup --ar 1:1 --v 6.0"
+TEXTS = {
+    "en": {
+        "welcome": "Welcome to Sports Pulse Bot! 🏆\nSelect a sport category below:",
+        "motorsport_menu": "🏎 Choose a motorsport discipline:",
+        "football_menu": "⚽ **Latest Football News:**\n\n1. Champions League group stage highlights\n2. Transfer window updates and rumors\n3. Weekend derby preview",
+        "basketball_menu": "🏀 **Latest Basketball News:**\n\n1. NBA playoffs race heats up\n2. Stunning buzzer-beater ends last night's game\n3. Injury reports and team updates",
+        "f1_news": "🏁 **Latest Formula 1 News:**\n\n1. Leclerc sets the pace in practice\n2. McLaren announces a major upgrade package\n3. Antonelli prepares for the upcoming Grand Prix",
+        "motogp_news": "🏍 **Latest MotoGP News:**\n\n1. Márquez claims thrilling pole position\n2. Championship battle tightens after wet race\n3. Factory teams test new aerodynamics",
+        "btn_football": "⚽ Football",
+        "btn_basketball": "🏀 Basketball",
+        "btn_motorsport": "🏍 Motorsport",
+        "btn_lang": "🌐 Мова: Українська 🇺🇦",
+        "btn_back": "⬅️ Back",
+    },
+    "ua": {
+        "welcome": "Ласкаво просимо до Sports Pulse Bot! 🏆\nОберіть категорію спорту нижче:",
+        "motorsport_menu": "🏎 Оберіть дисципліну мотоспорту:",
+        "football_menu": "⚽ **Останні новини футболу:**\n\n1. Найяскравіші моменти Ліги Чемпіонів\n2. Новини трансферного вікна та чутки\n3. Прев'ю центрального матчу туру",
+        "basketball_menu": "🏀 **Останні новини баскетболу:**\n\n1. Боротьба за плей-оф в НБА загострюється\n2. Неймовірний кидок на останній секунді\n3. Оновлення щодо травм та складу команд",
+        "f1_news": "🏁 **Останні новини Формули-1:**\n\n1. Леклер показує найкращий час у вільних заїздах\n2. McLaren анонсує великий пакет оновлень\n3. Антонеллі готується до майбутнього Гран-прі",
+        "motogp_news": "🏍 **Останні новини MotoGP:**\n\n1. Маркес виборює захопливу поул-позицію\n2. Боротьба за чемпіонство загострюється після дощової гонки\n3. Заводські команди тестують нову аеродинаміку",
+        "btn_football": "⚽ Футбол",
+        "btn_basketball": "🏀 Баскетбол",
+        "btn_motorsport": "🏍 Мотоспорт",
+        "btn_lang": "🌐 Language: English 🇬🇧",
+        "btn_back": "⬅️ Назад",
+    }
 }
 
-def get_styles_keyboard(current_style: str = "artistic"):
-    styles = [
-        ("artistic", "🎨 Artistic Paint"),
-        ("webtoon", "📖 Webtoon / Manhwa"),
-        ("concept", "🏛️ Concept Art"),
-        ("dark_fantasy", "🗡️ Dark Fantasy"),
-        ("stylized_3d", "🧊 Modern 3D"),
-        ("cyber_punk", "⚡ Next-Gen Cyber"),
-        ("anime_modern", "✨ Modern Anime"),
-        ("minimal_vector", "📐 Clean Vector"),
-        ("cinematic", "🎬 Cinematic Shot"),
-        ("neon_portrait", "💡 Neon Portrait")
-    ]
-    
-    keyboard = []
-    row = []
-    for code, name in styles:
-        prefix = "✅ " if code == current_style else ""
-        row.append(InlineKeyboardButton(text=f"{prefix}{name}", callback_data=f"style_{code}"))
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
-        
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+def get_main_keyboard(lang: str):
+    builder = InlineKeyboardBuilder()
+    builder.button(text=TEXTS[lang]["btn_football"], callback_data="news_football")
+    builder.button(text=TEXTS[lang]["btn_basketball"], callback_data="news_basketball")
+    builder.button(text=TEXTS[lang]["btn_motorsport"], callback_data="menu_motorsport")
+    builder.button(text=TEXTS[lang]["btn_lang"], callback_data="toggle_language")
+    builder.adjust(2, 1, 1)
+    return builder.as_markup()
+
+def get_motorsport_keyboard(lang: str):
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🏎 Formula 1", callback_data="news_f1")
+    builder.button(text="🏍 MotoGP", callback_data="news_motogp")
+    builder.button(text=TEXTS[lang]["btn_back"], callback_data="menu_main")
+    builder.adjust(2, 1)
+    return builder.as_markup()
+
+def get_back_keyboard(lang: str, back_callback: str):
+    builder = InlineKeyboardBuilder()
+    builder.button(text=TEXTS[lang]["btn_back"], callback_data=back_callback)
+    return builder.as_markup()
 
 @dp.message(CommandStart())
-async def cmd_start(message: Message):
-    user_selected_style[message.from_user.id] = "artistic"
-    welcome_text = (
-        "✦ ─────────── ⚡ ─────────── ✦\n"
-        "       🤖 **FORMATIFY BOT**       \n"
-        "✦ ─────────── ⚡ ─────────── ✦\n\n"
-        "✨ *Modern Massive AI Prompt Enhancer.*\n\n"
-        "👇 *Choose a modern style below, then send your raw idea (e.g., 'gray cat avatar')!*"
-    )
-    await message.answer(welcome_text, reply_markup=get_styles_keyboard("artistic"), parse_mode="Markdown")
-
-@dp.callback_query(F.data.startswith("style_"))
-async def set_user_style(callback: CallbackQuery):
-    style_code = callback.data.split("_")[1]
-    user_selected_style[callback.from_user.id] = style_code
-    
-    await callback.answer(f"Style: {style_code.upper()}", show_alert=True)
-    
-    try:
-        await callback.message.edit_reply_markup(reply_markup=get_styles_keyboard(style_code))
-    except Exception:
-        pass
-
-@dp.message(F.text & ~F.text.startswith("/"))
-async def handle_prompt_generation(message: Message):
+async def cmd_start(message: types.Message):
     user_id = message.from_user.id
-    current_style = user_selected_style.get(user_id, "artistic")
-    raw_text = message.text.strip()
+    if user_id not in user_languages:
+        user_languages[user_id] = "en"  # За замовчуванням англійська
     
-    template_func = PROMPT_TEMPLATES.get(current_style, PROMPT_TEMPLATES["artistic"])
-    generated_prompt = template_func(raw_text)
+    lang = user_languages[user_id]
+    await message.answer(TEXTS[lang]["welcome"], reply_markup=get_main_keyboard(lang))
+
+@dp.callback_query(F.data == "toggle_language")
+async def toggle_language(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    current_lang = user_languages.get(user_id, "en")
+    new_lang = "ua" if current_lang == "en" else "en"
+    user_languages[user_id] = new_lang
     
-    response = (
-        "✦ ─────────── ✧ ─────────── ✦\n"
-        f"🎯 **RAW IDEA:** _{raw_text}_\n"
-        f"🎨 **STYLE:** `{current_style.upper()}`\n\n"
-        "🚀 **MASSIVE PROMPT:**\n"
-        f"`{generated_prompt}`\n"
-        "✦ ─────────── ✧ ─────────── ✦\n\n"
-        "💡 *Copy and paste into Midjourney or DALL-E!*"
+    await callback.message.edit_text(
+        TEXTS[new_lang]["welcome"], 
+        reply_markup=get_main_keyboard(new_lang)
     )
-    
-    await message.answer(
-        response,
-        reply_markup=get_styles_keyboard(current_style),
+    await callback.answer()
+
+@dp.callback_query(F.data == "menu_main")
+async def menu_main(callback: types.CallbackQuery):
+    lang = user_languages.get(callback.from_user.id, "en")
+    await callback.message.edit_text(TEXTS[lang]["welcome"], reply_markup=get_main_keyboard(lang))
+    await callback.answer()
+
+@dp.callback_query(F.data == "menu_motorsport")
+async def menu_motorsport(callback: types.CallbackQuery):
+    lang = user_languages.get(callback.from_user.id, "en")
+    await callback.message.edit_text(TEXTS[lang]["motorsport_menu"], reply_markup=get_motorsport_keyboard(lang))
+    await callback.answer()
+
+@dp.callback_query(F.data == "news_football")
+async def news_football(callback: types.CallbackQuery):
+    lang = user_languages.get(callback.from_user.id, "en")
+    await callback.message.edit_text(
+        TEXTS[lang]["football_menu"],
+        reply_markup=get_back_keyboard(lang, "menu_main"),
         parse_mode="Markdown"
     )
+    await callback.answer()
+
+@dp.callback_query(F.data == "news_basketball")
+async def news_basketball(callback: types.CallbackQuery):
+    lang = user_languages.get(callback.from_user.id, "en")
+    await callback.message.edit_text(
+        TEXTS[lang]["basketball_menu"],
+        reply_markup=get_back_keyboard(lang, "menu_main"),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "news_f1")
+async def news_f1(callback: types.CallbackQuery):
+    lang = user_languages.get(callback.from_user.id, "en")
+    await callback.message.edit_text(
+        TEXTS[lang]["f1_news"], 
+        reply_markup=get_back_keyboard(lang, "menu_motorsport"),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "news_motogp")
+async def news_motogp(callback: types.CallbackQuery):
+    lang = user_languages.get(callback.from_user.id, "en")
+    await callback.message.edit_text(
+        TEXTS[lang]["motogp_news"], 
+        reply_markup=get_back_keyboard(lang, "menu_motorsport"),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
 
 async def main():
-    logging.basicConfig(level=logging.INFO)
-    print("Formatify Modern Prompt Bot is online!")
+    print("Бот запущено...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
-    
+        
